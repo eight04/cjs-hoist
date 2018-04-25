@@ -27,8 +27,6 @@
   "dependencies": {
     "ecma-variable-scope": "^2.1.0",
     "estraverse": "^4.2.0",
-    "estree-walker": "^0.5.1",
-    "magic-string": "^0.24.0",
-    "scope-analyzer": "^2.0.3"
+    "magic-string": "^0.24.0"
   }
 }
