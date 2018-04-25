@@ -1,0 +1,32 @@
+{
+  "name": "cjs-hoist",
+  "version": "0.0.0",
+  "description": "Transform CommonJS module, hoisting `require` and `exports` statements to top-level.",
+  "keywords": [
+    "cjs",
+    "commonjs",
+    "transform",
+    "require",
+    "exports",
+    "hoist"
+  ],
+  "main": "index.js",
+  "scripts": {
+    "test": "eslint **/*.js && mocha",
+    "preversion": "npm test",
+    "postversion": "git push --follow-tags && npm publish"
+  },
+  "repository": "eight04/cjs-hoist",
+  "author": "eight04 <eight04@gmail.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "acorn": "^5.5.3",
+    "eslint": "^4.19.1",
+    "mocha": "^5.1.1"
+  },
+  "dependencies": {
+    "ecma-variable-scope": "^2.1.0",
+    "estree-walker": "^0.5.1",
+    "magic-string": "^0.24.0"
+  }
+}
