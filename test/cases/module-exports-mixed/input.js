@@ -1,5 +1,5 @@
 function test() {
-  module;
-  exports;
+  module.exports();
+  exports();
 }
-module.exports = exports = "foo";
+module.exports = exports = () => "foo";

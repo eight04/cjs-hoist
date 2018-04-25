@@ -1,1 +1,3 @@
-exports.foo = "foo";
+function test() {
+  exports.foo();
+}

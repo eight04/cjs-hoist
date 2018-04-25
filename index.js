@@ -1,6 +1,7 @@
-const {walk} = require("estree-walker");
+const {traverse} = require("estraverse");
 const MagicString = require("magic-string");
 const ecmaVariableScope = require("ecma-variable-scope");
+// const scopeAnalyzer = require("scope-analyzer");
 
 function getExportInfo(node) {
   if (node.left.type === "MemberExpression") {
@@ -317,22 +318,123 @@ function transformImportDynamic({s, node}) {
   );
 }
 
-function transform({parse, code, sourceMap = false} = {}) {
+function createTopLevelAnalyzer() {
+  const nodes = [];
+  return {enter, get};
+  
+  function enter({node, parent}) {
+    if (parent && parent.type === "Program") {
+      node.topLevel = true;
+      nodes.push(node);
+    }
+  }
+  
+  function get() {
+    return nodes[nodes.length - 1];
+  }
+}
+
+function createExportTransformer({s, code, topLevel}) {
+  let moduleDeclarePos;
+  let exportDeclarePos;
+  let isExportDeclared = false;
+  let isModuleDeclared = false;
+  return {
+    transformExport,
+    transformModule,
+    transformModuleAssign,
+    writeDeclare,
+    writeExport
+  };
+  
+  function transformModule(node) {
+    if (node.name !== "module" || !node.scopeInfo || node.scopeInfo.type !== "undeclared") {
+      return;
+    }
+    if (!isModuleDeclared) {
+      moduleDeclarePos = topLevel.get().start;
+      // s.appendRight(
+        // topLevel.get().start,
+        // "const _module_ = {exports: {}};\n"
+      // );
+      isModuleDeclared = true;
+    }
+    s.overwrite(node.start, node.end, "_module_", {contentOnly: true});
+  }
+  
+  function transformModuleAssign(node, skip) {
+    if (!isModuleDeclared && getExportInfo(node)) {
+      skip(); // ignore bare exports
+    }
+  }
+  
+  function transformExport(node) {
+    if (node.name !== "exports" || !node.scopeInfo || node.scopeInfo.type !== "undeclared") {
+      return;
+    }
+    if (!isExportDeclared) {
+      exportDeclarePos = topLevel.get().start;
+      // s.appendRight(
+        // topLevel.get().start,
+        // "let _exports_ = {};\n"
+      // );
+      isExportDeclared = true;
+    }
+    s.overwrite(node.start, node.end, "_exports_", {contentOnly: true});
+  }
+  
+  function writeDeclare() {
+    if (isExportDeclared && isModuleDeclared && moduleDeclarePos < exportDeclarePos) {
+      exportDeclarePos = moduleDeclarePos;
+    }
+    if (isExportDeclared) {
+      s.appendRight(exportDeclarePos, "let _exports_ = {};\n");
+    }
+    if (isModuleDeclared) {
+      if (isExportDeclared) {
+        s.appendRight(moduleDeclarePos, "const _module_ = {exports: _exports_};\n");
+      } else {
+        s.appendRight(moduleDeclarePos, "const _module_ = {exports: {}};\n");
+      }
+    }
+  }
+  
+  function writeExport() {
+    if (isModuleDeclared) {
+      s.appendRight(topLevel.get().end, "\nmodule.exports = _module_.exports;");
+    } else if (isExportDeclared) {
+      s.appendRight(topLevel.get().end, "\nmodule.exports = _exports_;");
+    }
+  }
+}
+
+function transform({parse, code, sourceMap = false, ignoreDynamicRequire = true} = {}) {
   const s = new MagicString(code);
   const ast = parse(code);
   ecmaVariableScope(ast);
-  walk(ast, {enter(node, parent) {
-    if (node.type === "VariableDeclaration" && parent.type === "Program") {
-      transformImportDeclare({s, node, code});
-      transformExportDeclare({s, node});
+  const topLevel = createTopLevelAnalyzer();
+  const exportTransformer = createExportTransformer({s, code, topLevel});
+  traverse(ast, {enter(node, parent) {
+    topLevel.enter({node, parent});
+    if (node.type === "Identifier") {
+      exportTransformer.transformExport(node);
+      exportTransformer.transformModule(node);
+      // if (node.name === "exports" && node.scopeInfo && node.scopeInfo.type === "undeclared") {
+        // rewrite this
+      // }
+      debugger;
+    } else if (node.type === "VariableDeclaration" && parent.type === "Program") {
+      // transformImportDeclare({s, node, code});
+      // transformExportDeclare({s, node});
     } else if (node.type === "AssignmentExpression" && parent.topLevel) {
-      transformExportAssign({s, node});
-    } else if (node.type === "ExpressionStatement" && parent.type === "Program") {
-      node.topLevel = true;
-    } else if (node.type === "CallExpression") {
-      transformImportDynamic({s, node});
+      exportTransformer.transformModuleAssign(node, () => this.skip());
+      // transformExportAssign({s, node});
+    } else if (node.type === "CallExpression" && getDynamicImport(node) && ignoreDynamicRequire) {
+      this.skip();
     }
   }});
+  exportTransformer.writeDeclare();
+  exportTransformer.writeExport();
   return {
     code: s.toString(),
     map: sourceMap && s.generateMap()

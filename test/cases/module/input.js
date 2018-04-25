@@ -1,4 +1,4 @@
 function test() {
-  module
+  module.exports();
 }
-module.exports = "foo";
+module.exports = () => {};
