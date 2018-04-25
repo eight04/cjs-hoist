@@ -408,12 +408,43 @@ function createExportTransformer({s, code, topLevel}) {
   }
 }
 
+function createImportTransformer({s, code, topLevel}) {
+  const imports = new Map;
+  return {transform};
+  
+  function transform(node) {
+    const required = getRequireInfo(node);
+    if (!required || node.callee.scopeInfo.type !== "undeclared") {
+      return;
+    }
+    if (!imports.has(required.value)) {
+      const name = `_require_${required.value.replace(/[\W_]/g, c => {
+        if (c == "/" || c == "\\") {
+          return "$";
+        }
+        if (c == "_") {
+          return "__";
+        }
+        return "_";
+      })}_`;
+      imports.set(required.value, name);
+      s.appendRight(
+        topLevel.get().start,
+        `const ${name} = require(${JSON.stringify(required.value)});\n`
+      );
+    }
+    const name = imports.get(required.value);
+    s.overwrite(node.start, node.end, name);
+  }
+}
+
 function transform({parse, code, sourceMap = false, ignoreDynamicRequire = true} = {}) {
   const s = new MagicString(code);
   const ast = parse(code);
   ecmaVariableScope(ast);
   const topLevel = createTopLevelAnalyzer();
   const exportTransformer = createExportTransformer({s, code, topLevel});
+  const importTransformer = createImportTransformer({s, code, topLevel});
   traverse(ast, {enter(node, parent) {
     topLevel.enter({node, parent});
     if (node.type === "Identifier") {
@@ -422,7 +453,7 @@ function transform({parse, code, sourceMap = false, ignoreDynamicRequire = true}
       // if (node.name === "exports" && node.scopeInfo && node.scopeInfo.type === "undeclared") {
         // rewrite this
       // }
-      debugger;
+      // debugger;
     } else if (node.type === "VariableDeclaration" && parent.type === "Program") {
       // transformImportDeclare({s, node, code});
       // transformExportDeclare({s, node});
@@ -431,6 +462,8 @@ function transform({parse, code, sourceMap = false, ignoreDynamicRequire = true}
       // transformExportAssign({s, node});
     } else if (node.type === "CallExpression" && getDynamicImport(node) && ignoreDynamicRequire) {
       this.skip();
+    } else if (node.type === "CallExpression") {
+      importTransformer.transform(node);
     }
   }});
   exportTransformer.writeDeclare();
