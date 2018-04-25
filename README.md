@@ -39,6 +39,7 @@ This module exports following members.
 * `parse`: function. A parser function which can parse JavaScript code into ESTree.
 * `code`: string. The JavaScript source code.
 * `sourceMap?`: boolean. If true then generate the source map. Default: `false`
+* `ignoreDynamicRequire?`: boolean. If true then the dynamic require (i.e. `Promise.resolve(require("..."))`) is ignored. Default: `true`
 
 The result object has following members:
 
