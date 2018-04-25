@@ -152,7 +152,13 @@ function createExportTransformer({s, topLevel}) {
 
 function createImportTransformer({s, topLevel}) {
   const imports = new Map;
-  return {transform};
+  return {transform, transformDynamic};
+  
+  function transformDynamic(node, skip) {
+    if (getDynamicImport(node)) {
+      skip();
+    }
+  }
   
   function transform(node) {
     const required = getRequireInfo(node);
@@ -194,9 +200,10 @@ function transform({parse, code, sourceMap = false, ignoreDynamicRequire = true}
       exportTransformer.transformModule(node);
     } else if (node.type === "AssignmentExpression" && parent.topLevel) {
       exportTransformer.transformModuleAssign(node, () => this.skip());
-    } else if (node.type === "CallExpression" && ignoreDynamicRequire && getDynamicImport(node)) {
-      this.skip();
     } else if (node.type === "CallExpression") {
+      if (ignoreDynamicRequire) {
+        importTransformer.transformDynamic(node, () => this.skip());
+      }
       importTransformer.transform(node);
     }
   }});
