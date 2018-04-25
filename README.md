@@ -49,6 +49,6 @@ The result object has following members:
 Changelog
 ---------
 
-* 0.1.0 (?)
+* 0.1.0 (Apr 26, 2018)
 
   - Initial release.
