@@ -1,6 +1,6 @@
 {
   "name": "cjs-hoist",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Transform CommonJS module, hoisting `require` and `exports` statements to top-level.",
   "keywords": [
     "cjs",
