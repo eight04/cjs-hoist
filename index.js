@@ -89,12 +89,15 @@ function createExportTransformer({s, topLevel}) {
   let exportDeclarePos;
   let isExportDeclared = false;
   let isModuleDeclared = false;
+  let isTouched = false;
+  
   return {
     transformExport,
     transformModule,
     transformModuleAssign,
     writeDeclare,
-    writeExport
+    writeExport,
+    isTouched: () => isTouched
   };
   
   function transformModule(node) {
@@ -106,6 +109,7 @@ function createExportTransformer({s, topLevel}) {
       isModuleDeclared = true;
     }
     s.overwrite(node.start, node.end, "_module_", {contentOnly: true});
+    isTouched = true;
   }
   
   function transformModuleAssign(node, skip) {
@@ -123,6 +127,7 @@ function createExportTransformer({s, topLevel}) {
       isExportDeclared = true;
     }
     s.overwrite(node.start, node.end, "_exports_", {contentOnly: true});
+    isTouched = true;
   }
   
   function writeDeclare() {
@@ -131,6 +136,7 @@ function createExportTransformer({s, topLevel}) {
     }
     if (isExportDeclared) {
       s.appendRight(exportDeclarePos, "let _exports_ = {};\n");
+      isTouched = true;
     }
     if (isModuleDeclared) {
       if (isExportDeclared) {
@@ -138,21 +144,30 @@ function createExportTransformer({s, topLevel}) {
       } else {
         s.appendRight(moduleDeclarePos, "const _module_ = {exports: {}};\n");
       }
+      isTouched = true;
     }
   }
   
   function writeExport() {
     if (isModuleDeclared) {
       s.appendRight(topLevel.get().end, "\nmodule.exports = _module_.exports;");
+      isTouched = true;
     } else if (isExportDeclared) {
       s.appendRight(topLevel.get().end, "\nmodule.exports = _exports_;");
+      isTouched = true;
     }
   }
 }
 
 function createImportTransformer({s, topLevel}) {
   const imports = new Map;
-  return {transform, transformDynamic};
+  let isTouched = false;
+  
+  return {
+    transform,
+    transformDynamic,
+    isTouched: () => isTouched
+  };
   
   function transformDynamic(node, skip) {
     if (getDynamicImport(node)) {
@@ -183,6 +198,7 @@ function createImportTransformer({s, topLevel}) {
     }
     const name = imports.get(required.value);
     s.overwrite(node.start, node.end, name);
+    isTouched = true;
   }
 }
 
@@ -209,9 +225,11 @@ function transform({parse, code, sourceMap = false, ignoreDynamicRequire = true}
   }});
   exportTransformer.writeDeclare();
   exportTransformer.writeExport();
+  const isTouched = importTransformer.isTouched() || exportTransformer.isTouched();
   return {
-    code: s.toString(),
-    map: sourceMap && s.generateMap()
+    code: isTouched ? s.toString() : code,
+    map: sourceMap && s.generateMap(),
+    isTouched
   };
 }
 

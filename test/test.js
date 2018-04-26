@@ -10,8 +10,9 @@ describe("cases", () => {
       const input = fs.readFileSync(`${__dirname}/cases/${dir}/input.js`, "utf8").replace(/\r/g, "");
       const output = fs.readFileSync(`${__dirname}/cases/${dir}/output.js`, "utf8").replace(/\r/g, "");
       
-      const actual = transform({code: input, parse}).code;
-      assert.equal(actual, output);
+      const result = transform({code: input, parse});
+      assert.equal(result.code, output);
+      assert.equal(result.isTouched, input !== output);
     });
   }
 });
