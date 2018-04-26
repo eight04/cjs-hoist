@@ -52,6 +52,10 @@ The result object has following members:
 Changelog
 ---------
 
+* 0.1.3 (Apr 26, 2018)
+
+  - Dependency change: drop estraverse, ecma-variable-scope; add estree-walker, rollup-pluginutils, is-reference.
+
 * 0.1.2 (Apr 26, 2018)
 
   - Fix: require-in-module.
