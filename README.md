@@ -52,6 +52,10 @@ The result object has following members:
 Changelog
 ---------
 
+* 0.1.2 (Apr 26, 2018)
+
+  - Fix: require-in-module.
+
 * 0.1.1 (Apr 26, 2018)
 
   - Add: `isTouched` prop.
