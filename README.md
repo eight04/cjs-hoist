@@ -1,6 +1,8 @@
 cjs-hoist
 =========
 
+*Deprecated. This module had been merged into [cjs-es](https://github.com/eight04/cjs-es)*
+
 [![Build Status](https://travis-ci.org/eight04/cjs-hoist.svg?branch=master)](https://travis-ci.org/eight04/cjs-hoist)
 
 Transform CommonJS module, hoisting `require` and `exports` statements to top-level.
