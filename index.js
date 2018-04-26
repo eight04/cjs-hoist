@@ -1,6 +1,26 @@
-const {traverse} = require("estraverse");
+const {walk} = require("estree-walker");
 const MagicString = require("magic-string");
-const ecmaVariableScope = require("ecma-variable-scope");
+const {attachScopes} = require("rollup-pluginutils");
+const isReference = require("is-reference");
+
+function createScopeAnalyzer(ast) {
+  let scope = attachScopes(ast, "scope");
+  return {enter, leave, has};
+  
+  function enter(node) {
+    if (node.scope) {
+      scope = node.scope;
+    }
+  }
+  function leave(node) {
+    if (node.scope) {
+      scope = node.scope.parent;
+    }
+  }
+  function has(name) {
+    return scope.contains(name);
+  }
+}
 
 function getExportInfo(node) {
   if (node.left.type === "MemberExpression") {
@@ -84,7 +104,7 @@ function createTopLevelAnalyzer() {
   }
 }
 
-function createExportTransformer({s, topLevel}) {
+function createExportTransformer({s, topLevel, scope}) {
   let moduleDeclarePos;
   let exportDeclarePos;
   let isExportDeclared = false;
@@ -100,10 +120,10 @@ function createExportTransformer({s, topLevel}) {
     isTouched: () => isTouched
   };
   
-  function transformModule(node) {
+  function transformModule(node, parent) {
     if (
-      node.name !== "module" || !node.scopeInfo ||
-      node.scopeInfo.type !== "undeclared" || node.isBareExport
+      node.name !== "module" || !isReference(node, parent) ||
+      scope.has(node.name) || node.isBareExport
     ) {
       return;
     }
@@ -125,8 +145,8 @@ function createExportTransformer({s, topLevel}) {
     }
   }
   
-  function transformExport(node) {
-    if (node.name !== "exports" || !node.scopeInfo || node.scopeInfo.type !== "undeclared") {
+  function transformExport(node, parent) {
+    if (node.name !== "exports" || !isReference(node, parent) || scope.has(node.name)) {
       return;
     }
     if (!isExportDeclared) {
@@ -166,7 +186,7 @@ function createExportTransformer({s, topLevel}) {
   }
 }
 
-function createImportTransformer({s, topLevel}) {
+function createImportTransformer({s, topLevel, scope}) {
   const imports = new Map;
   let isTouched = false;
   
@@ -184,7 +204,7 @@ function createImportTransformer({s, topLevel}) {
   
   function transform(node) {
     const required = getRequireInfo(node);
-    if (!required || node.callee.scopeInfo.type !== "undeclared") {
+    if (!required || scope.has("require")) {
       return;
     }
     if (!imports.has(required.value)) {
@@ -212,24 +232,33 @@ function createImportTransformer({s, topLevel}) {
 function transform({parse, code, sourceMap = false, ignoreDynamicRequire = true} = {}) {
   const s = new MagicString(code);
   const ast = parse(code);
-  ecmaVariableScope(ast);
+  // ecmaVariableScope(ast);
+  
   const topLevel = createTopLevelAnalyzer();
-  const exportTransformer = createExportTransformer({s, topLevel});
-  const importTransformer = createImportTransformer({s, topLevel});
-  traverse(ast, {enter(node, parent) {
-    topLevel.enter({node, parent});
-    if (node.type === "Identifier") {
-      exportTransformer.transformExport(node);
-      exportTransformer.transformModule(node);
-    } else if (node.type === "AssignmentExpression" && parent.topLevel) {
-      exportTransformer.transformModuleAssign(node);
-    } else if (node.type === "CallExpression") {
-      if (ignoreDynamicRequire) {
-        importTransformer.transformDynamic(node, () => this.skip());
+  const scope = createScopeAnalyzer(ast);
+  const exportTransformer = createExportTransformer({s, topLevel, scope});
+  const importTransformer = createImportTransformer({s, topLevel, scope});
+  
+  walk(ast, {
+    enter(node, parent) {
+      topLevel.enter({node, parent});
+      scope.enter(node);
+      if (node.type === "Identifier") {
+        exportTransformer.transformExport(node, parent);
+        exportTransformer.transformModule(node, parent);
+      } else if (node.type === "AssignmentExpression" && parent.topLevel) {
+        exportTransformer.transformModuleAssign(node);
+      } else if (node.type === "CallExpression") {
+        if (ignoreDynamicRequire) {
+          importTransformer.transformDynamic(node, () => this.skip());
+        }
+        importTransformer.transform(node);
       }
-      importTransformer.transform(node);
+    },
+    leave(node) {
+      scope.leave(node);
     }
-  }});
+  });
   exportTransformer.writeDeclare();
   exportTransformer.writeExport();
   const isTouched = importTransformer.isTouched() || exportTransformer.isTouched();
