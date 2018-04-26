@@ -101,7 +101,10 @@ function createExportTransformer({s, topLevel}) {
   };
   
   function transformModule(node) {
-    if (node.name !== "module" || !node.scopeInfo || node.scopeInfo.type !== "undeclared") {
+    if (
+      node.name !== "module" || !node.scopeInfo ||
+      node.scopeInfo.type !== "undeclared" || node.isBareExport
+    ) {
       return;
     }
     if (!isModuleDeclared) {
@@ -112,9 +115,13 @@ function createExportTransformer({s, topLevel}) {
     isTouched = true;
   }
   
-  function transformModuleAssign(node, skip) {
-    if (!isModuleDeclared && getExportInfo(node)) {
-      skip(); // ignore bare exports
+  function transformModuleAssign(node) {
+    if (isModuleDeclared) {
+      return;
+    }
+    const exported = getExportInfo(node);
+    if (exported && exported.left.object.name === "module") {
+      exported.left.object.isBareExport = true; // ignore bare exports
     }
   }
   
@@ -215,7 +222,7 @@ function transform({parse, code, sourceMap = false, ignoreDynamicRequire = true}
       exportTransformer.transformExport(node);
       exportTransformer.transformModule(node);
     } else if (node.type === "AssignmentExpression" && parent.topLevel) {
-      exportTransformer.transformModuleAssign(node, () => this.skip());
+      exportTransformer.transformModuleAssign(node);
     } else if (node.type === "CallExpression") {
       if (ignoreDynamicRequire) {
         importTransformer.transformDynamic(node, () => this.skip());
